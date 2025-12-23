@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>錯誤 - CloudTodo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-20px); }
+        }
+        .float-animation {
+            animation: float 3s ease-in-out infinite;
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 min-h-screen flex items-center justify-center">
+    <div class="max-w-md w-full mx-4">
+        <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-8 text-center">
+            <!-- 錯誤圖示 -->
+            <div class="float-animation mb-6">
+                <svg class="w-24 h-24 mx-auto text-red-500 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                </svg>
+            </div>
+
+            <!-- 錯誤訊息 -->
+            <h1 class="text-4xl font-bold text-gray-800 dark:text-gray-100 mb-4">
+                糟糕！
+            </h1>
+            <p class="text-xl text-gray-600 dark:text-gray-300 mb-2">
+                發生錯誤
+            </p>
+            <p class="text-gray-500 dark:text-gray-400 mb-8">
+                抱歉，您請求的頁面不存在或發生了錯誤。
+            </p>
+
+            <!-- 錯誤代碼 -->
+            <div class="bg-gray-100 dark:bg-gray-700 rounded-lg p-4">
+                <p class="text-sm text-gray-600 dark:text-gray-400 mb-1">錯誤代碼</p>
+                <p class="text-2xl font-mono font-bold text-gray-800 dark:text-gray-200">404</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 深色模式支援
+        if (localStorage.getItem('color-theme') === 'dark' || (!('color-theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.add('dark');
+        }
+    </script>
+</body>
+</html>

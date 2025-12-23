@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CloudTodo - 雲端共享待辦事項</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2220%22 fill=%22%231e3a8a%22/><path d=%22M30 50 L45 65 L70 35%22 stroke=%22white%22 stroke-width=%228%22 fill=%22none%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22/></svg>">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        // 設定 Tailwind 支援 class 切換深色模式
+        tailwind.config = {
+            darkMode: 'class',
+        }
+    </script>
+    <!-- AWS SDK -->
+    <script src="https://sdk.amazonaws.com/js/aws-sdk-2.1.24.min.js"></script>
+    <!-- AWS Cognito Identity SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/amazon-cognito-identity-js@6.3.6/dist/amazon-cognito-identity.min.js"></script>
+    <link rel="stylesheet" href="style.css">    
+</head>
+<body class="bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 min-h-screen">
+
+    <nav class="bg-gray-600 dark:bg-gray-800 text-white p-4 shadow-md">
+        <div class="flex justify-between items-center px-4">
+            <h1 class="text-xl font-bold flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" class="w-8 h-8">
+                    <rect width="100" height="100" rx="20" fill="#1e3a8a"/>
+                    <path d="M30 50 L45 65 L70 35" stroke="white" stroke-width="8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                CloudTodo 雲端共享
+            </h1>
+            
+            <div class="flex items-center space-x-4">
+                <button onclick="toggleDarkMode()" class="p-2 rounded-full hover:bg-gray-500 dark:hover:bg-gray-700 transition" id="theme-toggle">
+                    <svg id="theme-toggle-light-icon" class="hidden w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"></path></svg>
+                    <svg id="theme-toggle-dark-icon" class="hidden w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path></svg>
+                </button>
+
+                <div id="user-info" class="hidden flex items-center gap-2">
+                    <span id="user-email" class="mr-2 text-sm text-gray-100"></span>
+                    <button onclick="openSettingsModal()" class="bg-gray-700 hover:bg-gray-800 px-3 py-1 rounded text-sm transition border border-gray-400">設定</button>
+                    <button onclick="logout()" class="bg-gray-700 hover:bg-gray-800 px-3 py-1 rounded text-sm transition border border-gray-400">登出</button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="flex">
+        <!-- 左側分類面板 -->
+        <aside id="sidebar" class="hidden sidebar w-64 bg-gray-50 dark:bg-gray-900 min-h-screen border-r border-gray-200 dark:border-gray-700 fixed md:static z-40">
+            <div class="p-6">
+                <div class="flex justify-between items-center mb-6 toggle-btn-container">
+                    <h2 class="text-xl font-bold text-gray-700 dark:text-gray-200">分類管理</h2>
+                    <button onclick="toggleSidebar()" class="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition" title="收起/展開側邊欄">
+                        <svg class="toggle-icon-left w-5 h-5 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"></path>
+                        </svg>
+                        <svg class="toggle-icon-right w-5 h-5 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"></path>
+                        </svg>
+                    </button>
+                </div>
+                <nav class="space-y-1">
+                    <!-- 所有任務 -->
+                    <button onclick="filterByCategory('all')" id="filter-all" class="w-full flex items-center justify-between px-4 py-3 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition group category-filter">
+                        <div class="flex items-center space-x-3">
+                            <svg class="category-icon w-5 h-5 text-gray-600 dark:text-gray-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"></path>
+                            </svg>
+                            <span class="sidebar-text font-medium text-gray-700 dark:text-gray-300 transition-opacity">所有任務</span>
+                        </div>
+                        <span id="count-all" class="category-count text-sm text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded-full transition-opacity">0</span>
+                    </button>
+                    
+                    <!-- 與我共用 -->
+                    <button onclick="filterByCategory('shared')" id="filter-shared" class="w-full flex items-center justify-between px-4 py-3 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition group category-filter">
+                        <div class="flex items-center space-x-3">
+                            <svg class="category-icon w-5 h-5 text-gray-600 dark:text-gray-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z"></path>
+                            </svg>
+                            <span class="sidebar-text font-medium text-gray-700 dark:text-gray-300 transition-opacity">與我共用</span>
+                        </div>
+                        <span id="count-shared" class="category-count text-sm text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded-full transition-opacity">0</span>
+                    </button>
+                    
+                    <!-- 工作 -->
+                    <button onclick="filterByCategory('work')" id="filter-work" class="w-full flex items-center justify-between px-4 py-3 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition group category-filter active">
+                        <div class="flex items-center space-x-3">
+                            <div class="category-icon w-3 h-3 rounded-full bg-blue-500 flex-shrink-0"></div>
+                            <span class="sidebar-text font-medium text-gray-700 dark:text-gray-300 transition-opacity">工作</span>
+                        </div>
+                        <span id="count-work" class="category-count text-sm text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded-full transition-opacity">0</span>
+                    </button>
+                    
+                    <!-- 個人 -->
+                    <button onclick="filterByCategory('personal')" id="filter-personal" class="w-full flex items-center justify-between px-4 py-3 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition group category-filter">
+                        <div class="flex items-center space-x-3">
+                            <div class="category-icon w-3 h-3 rounded-full bg-green-500 flex-shrink-0"></div>
+                            <span class="sidebar-text font-medium text-gray-700 dark:text-gray-300 transition-opacity">個人</span>
+                        </div>
+                        <span id="count-personal" class="category-count text-sm text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded-full transition-opacity">0</span>
+                    </button>
+                    
+                    <!-- 學習 -->
+                    <button onclick="filterByCategory('study')" id="filter-study" class="w-full flex items-center justify-between px-4 py-3 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition group category-filter">
+                        <div class="flex items-center space-x-3">
+                            <div class="category-icon w-3 h-3 rounded-full bg-purple-500 flex-shrink-0"></div>
+                            <span class="sidebar-text font-medium text-gray-700 dark:text-gray-300 transition-opacity">學習</span>
+                        </div>
+                        <span id="count-study" class="category-count text-sm text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded-full transition-opacity">0</span>
+                    </button>
+                    
+                    <!-- 健康 -->
+                    <button onclick="filterByCategory('health')" id="filter-health" class="w-full flex items-center justify-between px-4 py-3 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition group category-filter">
+                        <div class="flex items-center space-x-3">
+                            <div class="category-icon w-3 h-3 rounded-full bg-pink-500 flex-shrink-0"></div>
+                            <span class="sidebar-text font-medium text-gray-700 dark:text-gray-300 transition-opacity">健康</span>
+                        </div>
+                        <span id="count-health" class="category-count text-sm text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded-full transition-opacity">0</span>
+                    </button>
+                    
+                    <!-- 其他 -->
+                    <button onclick="filterByCategory('other')" id="filter-other" class="w-full flex items-center justify-between px-4 py-3 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition group category-filter">
+                        <div class="flex items-center space-x-3">
+                            <div class="category-icon w-3 h-3 rounded-full bg-gray-500 flex-shrink-0"></div>
+                            <span class="sidebar-text font-medium text-gray-700 dark:text-gray-300 transition-opacity">其他</span>
+                        </div>
+                        <span id="count-other" class="category-count text-sm text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded-full transition-opacity">0</span>
+                    </button>
+                </nav>
+                
+                <!-- 新增分類按鈕 -->
+                <div class="add-category-border mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
+                    <button onclick="openAddCategoryModal()" class="add-category-btn w-full flex items-center justify-center px-4 py-3 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition group">
+                        <svg class="add-icon w-5 h-5 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                        </svg>
+                        <span class="sidebar-text font-medium text-gray-700 dark:text-gray-300 transition-opacity ml-2">新增分類</span>
+                    </button>
+                    
+                    <!-- 刪除分類按鈕 -->
+                    <button onclick="openDeleteCategoryModal()" class="add-category-btn w-full flex items-center justify-center px-4 py-3 rounded-lg bg-red-100 dark:bg-red-900/30 hover:bg-red-200 dark:hover:bg-red-900/50 transition group mt-2">
+                        <svg class="add-icon w-5 h-5 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                        </svg>
+                        <span class="sidebar-text font-medium text-red-700 dark:text-red-300 transition-opacity ml-2">刪除分類</span>
+                    </button>
+                </div>
+            </div>
+        </aside>
+
+        <!-- 主內容區 -->
+        <div class="flex-1">
+            <div class="container mx-auto p-4 max-w-4xl">
+                
+                <div id="auth-section" class="bg-white dark:bg-gray-800 p-8 rounded-lg shadow-xl mt-10 max-w-md mx-auto border border-gray-100 dark:border-gray-700" style="opacity: 0; transition: opacity 0.3s;">
+            <h2 id="auth-title" class="text-2xl font-bold mb-6 text-center">登入</h2>
+            <div class="space-y-4">
+                <!-- 成功提示 -->
+                <div id="login-success" class="hidden bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-600 dark:text-green-400 px-4 py-3 rounded-lg mb-4">
+                    <div class="flex items-center">
+                        <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+                        </svg>
+                        <span id="login-success-message"></span>
+                    </div>
+                </div>
+                <!-- 錯誤提示 -->
+                <div id="login-error" class="hidden bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 px-4 py-3 rounded-lg mb-4">
+                    <div class="flex items-center">
+                        <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>
+                        </svg>
+                        <span id="login-error-message"></span>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-gray-600 dark:text-gray-400 text-sm mb-1">電子郵件</label>
+                    <input type="email" id="email" class="w-full border dark:border-gray-600 bg-white dark:bg-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gray-500" placeholder="example@mail.com">
+                </div>
+                <div>
+                    <label class="block text-gray-600 dark:text-gray-400 text-sm mb-1">密碼<span id="password-hint" class="text-xs text-gray-500 ml-2 hidden">(至少8位，包含大小寫字母和數字和特殊符號)</span></label>
+                    <div class="relative">
+                        <input type="password" id="password" class="w-full border dark:border-gray-600 bg-white dark:bg-gray-700 rounded-lg px-3 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-gray-500">
+                        <button type="button" onclick="togglePasswordVisibility()" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 focus:outline-none" title="顯示/隱藏密碼">
+                            <svg id="eye-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                            </svg>
+                            <svg id="eye-slash-icon" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <!-- 記住登入 -->
+                <div id="remember-me-section" class="flex items-center">
+                    <input type="checkbox" id="remember-me" checked class="w-4 h-4 text-gray-600 border-gray-300 rounded focus:ring-gray-500 focus:ring-2 cursor-pointer">
+                    <label for="remember-me" class="ml-2 text-sm text-gray-600 dark:text-gray-400 cursor-pointer">保持登入狀態</label>
+                </div>
+                <!-- 驗證碼輸入（註冊後顯示） -->
+                <div id="verification-section" class="hidden">
+                    <label class="block text-gray-600 dark:text-gray-400 text-sm mb-1">驗證碼</label>
+                    <input type="text" id="verification-code" class="w-full border dark:border-gray-600 bg-white dark:bg-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gray-500" placeholder="請輸入郵件中的驗證碼">
+                    <button onclick="verifyAccount()" class="w-full mt-2 bg-green-600 text-white font-bold py-2 rounded-lg hover:bg-green-700 transition">驗證帳號</button>
+                    <button onclick="resendCode()" class="w-full mt-2 text-gray-600 dark:text-gray-400 text-sm underline hover:text-gray-800 dark:hover:text-gray-200">重新發送驗證碼</button>
+                </div>
+                <button id="auth-button" onclick="handleAuth()" class="w-full bg-gray-600 text-white font-bold py-2 rounded-lg hover:bg-gray-700 transition">登入</button>
+                <div class="text-center space-y-2">
+                    <button id="toggle-auth" onclick="toggleAuthMode()" class="text-gray-600 dark:text-gray-400 text-sm underline hover:text-gray-800 dark:hover:text-gray-200">還沒有帳號？註冊</button>
+                    <div id="forgot-password-link" class="">
+                        <button onclick="openForgotPasswordModal()" class="text-gray-500 dark:text-gray-400 text-sm underline hover:text-gray-700 dark:hover:text-gray-300">忘記密碼？</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="app-section" class="hidden mt-6 space-y-6">
+
+            <section>
+                <div class="flex items-center justify-between mb-4">
+                    <h3 id="category-title" class="text-lg font-semibold">所有任務</h3>
+                    <div class="flex items-center gap-2">
+                        <label class="text-sm text-gray-600 dark:text-gray-400">排序：</label>
+                        <select id="sort-option" onchange="changeSortOption()" class="border dark:border-gray-600 bg-white dark:bg-gray-700 rounded px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-gray-500 cursor-pointer">
+                            <option value="default">預設</option>
+                            <option value="priority-high">重要性（高→低）</option>
+                            <option value="priority-low">重要性（低→高）</option>
+                            <option value="date-newest">日期（新→舊）</option>
+                            <option value="date-oldest">日期（舊→新）</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="task-list" class="space-y-3">
+                    <!-- 待辦事項將動態渲染在這裡 -->
+                </div>
+            </section>
+        </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 新增待辦事項模態視窗 -->
+    <div id="task-modal" class="hidden modal-backdrop" onclick="closeModalOnBackdrop(event)">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-2xl p-6 max-w-2xl w-full mx-4 border border-gray-200 dark:border-gray-700" onclick="event.stopPropagation()">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-semibold text-gray-600 dark:text-gray-400" id="modal-title">新增待辦事項</h3>
+                <button onclick="closeTaskModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-2xl font-bold">&times;</button>
+            </div>
+            <div class="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
+                <div>
+                    <label class="block text-sm text-gray-600 dark:text-gray-400 mb-1">任務標題</label>
+                    <input type="text" id="task-title" placeholder="要做什麼？" class="w-full border dark:border-gray-600 bg-white dark:bg-gray-700 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gray-500">
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-600 dark:text-gray-400 mb-2">重要性</label>
+                    <div class="flex gap-2">
+                        <label class="flex-1 cursor-pointer">
+                            <input type="radio" name="priority" value="0" class="peer hidden" checked>
+                            <div class="border-2 dark:border-gray-600 rounded-lg p-2 text-center transition peer-checked:border-gray-500 peer-checked:bg-gray-50 dark:peer-checked:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700">
+                                <div class="text-2xl">—</div>
+                            </div>
+                        </label>
+                        <label class="flex-1 cursor-pointer">
+                            <input type="radio" name="priority" value="1" class="peer hidden">
+                            <div class="border-2 dark:border-gray-600 rounded-lg p-2 text-center transition peer-checked:border-yellow-500 peer-checked:bg-yellow-50 dark:peer-checked:bg-yellow-900/20 hover:bg-gray-50 dark:hover:bg-gray-700">
+                                <div class="text-2xl">❗</div>
+                            </div>
+                        </label>
+                        <label class="flex-1 cursor-pointer">
+                            <input type="radio" name="priority" value="2" class="peer hidden">
+                            <div class="border-2 dark:border-gray-600 rounded-lg p-2 text-center transition peer-checked:border-orange-500 peer-checked:bg-orange-50 dark:peer-checked:bg-orange-900/20 hover:bg-gray-50 dark:hover:bg-gray-700">
+                                <div class="text-2xl">❗❗</div>
+                            </div>
+                        </label>
+                        <label class="flex-1 cursor-pointer">
+                            <input type="radio" name="priority" value="3" class="peer hidden">
+                            <div class="border-2 dark:border-gray-600 rounded-lg p-2 text-center transition peer-checked:border-red-500 peer-checked:bg-red-50 dark:peer-checked:bg-red-900/20 hover:bg-gray-50 dark:hover:bg-gray-700">
+                                <div class="text-2xl">❗❗❗</div>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-600 dark:text-gray-400 mb-2">分類</label>
+                    <div id="category-options" class="grid grid-cols-5 gap-2">
+                        <!-- 分類選項將動態渲染在這裡 -->
+                    </div>
+                </div>
+                <div>                    <label class="block text-sm text-gray-600 dark:text-gray-400 mb-1">任務描述</label>
+                    <textarea id="task-description" placeholder="詳細說明..." rows="4" class="w-full border dark:border-gray-600 bg-white dark:bg-gray-700 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gray-500 resize-none"></textarea>
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-600 dark:text-gray-400 mb-1">截止時間</label>
+                    <input type="datetime-local" id="task-deadline" class="w-full border dark:border-gray-600 bg-white dark:bg-gray-700 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gray-500">
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-600 dark:text-gray-400 mb-1">共享對象</label>
+                    <div class="border dark:border-gray-600 bg-white dark:bg-gray-700 rounded px-3 py-2 focus-within:ring-2 focus-within:ring-gray-500 min-h-[42px]">
+                        <div id="email-tags" class="flex flex-wrap gap-2 mb-2"></div>
+                        <input type="text" id="share-with" placeholder="輸入 Email 後按 Enter 或逗號" class="w-full outline-none bg-transparent" onkeydown="handleEmailInput(event)">
+                    </div>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">按 Enter 或逗號添加多個 Email</p>
+                </div>
+                <div class="flex gap-2">
+                    <button id="delete-task-btn" onclick="deleteCurrentTask()" class="hidden flex-1 bg-red-500 text-white font-bold py-2 rounded hover:bg-red-600 transition">刪除</button>
+                    <button id="save-task-btn" onclick="saveTask()" class="flex-1 bg-gray-500 text-white font-bold py-2 rounded hover:bg-gray-600 transition">新增事項</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 右下角行事曆按鈕 -->
+    <button id="calendar-button" class="hidden fab fixed bottom-28 right-8 bg-gray-600 hover:bg-gray-700 text-white rounded-full p-4 shadow-lg transition transform hover:scale-110 z-40" onclick="openCalendarModal()">
+        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+        </svg>
+    </button>
+
+    <!-- 右下角新增按鈕 -->
+    <button id="fab-button" class="hidden fab fixed bottom-8 right-8 bg-gray-600 hover:bg-gray-700 text-white rounded-full p-4 shadow-lg transition transform hover:scale-110 z-40" onclick="openTaskModal()">
+        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+        </svg>
+    </button>
+
+    <!-- 行事曆模態視窗 -->
+    <div id="calendar-modal" class="hidden modal-backdrop" onclick="closeModalOnBackdrop(event, 'calendar-modal')">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-2xl p-6 max-w-4xl w-full mx-4 border border-gray-200 dark:border-gray-700" onclick="event.stopPropagation()">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-semibold text-gray-600 dark:text-gray-400">行事曆</h3>
+                <button onclick="closeCalendarModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-2xl font-bold">&times;</button>
+            </div>
+            <div class="space-y-4">
+                <!-- 月份導航 -->
+                <div class="flex justify-between items-center">
+                    <button onclick="previousMonth()" class="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                        </svg>
+                    </button>
+                    <h4 class="text-lg font-bold" id="calendar-month-year"></h4>
+                    <button onclick="nextMonth()" class="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                        </svg>
+                    </button>
+                </div>
+                <!-- 行事曆表格 -->
+                <div class="grid grid-cols-7 gap-2">
+                    <div class="text-center font-bold text-gray-600 dark:text-gray-400 py-2">日</div>
+                    <div class="text-center font-bold text-gray-600 dark:text-gray-400 py-2">一</div>
+                    <div class="text-center font-bold text-gray-600 dark:text-gray-400 py-2">二</div>
+                    <div class="text-center font-bold text-gray-600 dark:text-gray-400 py-2">三</div>
+                    <div class="text-center font-bold text-gray-600 dark:text-gray-400 py-2">四</div>
+                    <div class="text-center font-bold text-gray-600 dark:text-gray-400 py-2">五</div>
+                    <div class="text-center font-bold text-gray-600 dark:text-gray-400 py-2">六</div>
+                </div>
+                <div id="calendar-days" class="grid grid-cols-7 gap-2"></div>
+                
+                <!-- 懸浮提示視窗 -->
+                <div id="calendar-tooltip" class="calendar-tooltip"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 新增分類模態視窗 -->
+    <div id="category-modal" class="hidden modal-backdrop" onclick="closeModalOnBackdrop(event, 'category-modal')">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-2xl p-6 max-w-md w-full mx-4 border border-gray-200 dark:border-gray-700" onclick="event.stopPropagation()">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-semibold text-gray-600 dark:text-gray-400">新增分類</h3>
+                <button onclick="closeCategoryModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-2xl font-bold">&times;</button>
+            </div>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm text-gray-600 dark:text-gray-400 mb-1">分類名稱</label>
+                    <input type="text" id="category-name" placeholder="輸入分類名稱" class="w-full border dark:border-gray-600 bg-white dark:bg-gray-700 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gray-500">
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-600 dark:text-gray-400 mb-2">選擇顏色</label>
+                    <div class="grid grid-cols-6 gap-3">
+                        <label class="cursor-pointer">
+                            <input type="radio" name="category-color" value="red" class="peer hidden">
+                            <div class="w-12 h-12 rounded-full bg-red-500 border-4 border-transparent peer-checked:border-gray-400 dark:peer-checked:border-gray-300 transition hover:scale-110"></div>
+                        </label>
+                        <label class="cursor-pointer">
+                            <input type="radio" name="category-color" value="orange" class="peer hidden">
+                            <div class="w-12 h-12 rounded-full bg-orange-500 border-4 border-transparent peer-checked:border-gray-400 dark:peer-checked:border-gray-300 transition hover:scale-110"></div>
+                        </label>
+                        <label class="cursor-pointer">
+                            <input type="radio" name="category-color" value="yellow" class="peer hidden">
+                            <div class="w-12 h-12 rounded-full bg-yellow-500 border-4 border-transparent peer-checked:border-gray-400 dark:peer-checked:border-gray-300 transition hover:scale-110"></div>
+                        </label>
+                        <label class="cursor-pointer">
+                            <input type="radio" name="category-color" value="green" class="peer hidden">
+                            <div class="w-12 h-12 rounded-full bg-green-500 border-4 border-transparent peer-checked:border-gray-400 dark:peer-checked:border-gray-300 transition hover:scale-110"></div>
+                        </label>
+                        <label class="cursor-pointer">
+                            <input type="radio" name="category-color" value="blue" class="peer hidden" checked>
+                            <div class="w-12 h-12 rounded-full bg-blue-500 border-4 border-transparent peer-checked:border-gray-400 dark:peer-checked:border-gray-300 transition hover:scale-110"></div>
+                        </label>
+                        <label class="cursor-pointer">
+                            <input type="radio" name="category-color" value="purple" class="peer hidden">
+                            <div class="w-12 h-12 rounded-full bg-purple-500 border-4 border-transparent peer-checked:border-gray-400 dark:peer-checked:border-gray-300 transition hover:scale-110"></div>
+                        </label>
+                        <label class="cursor-pointer">
+                            <input type="radio" name="category-color" value="pink" class="peer hidden">
+                            <div class="w-12 h-12 rounded-full bg-pink-500 border-4 border-transparent peer-checked:border-gray-400 dark:peer-checked:border-gray-300 transition hover:scale-110"></div>
+                        </label>
+                        <label class="cursor-pointer">
+                            <input type="radio" name="category-color" value="indigo" class="peer hidden">
+                            <div class="w-12 h-12 rounded-full bg-indigo-500 border-4 border-transparent peer-checked:border-gray-400 dark:peer-checked:border-gray-300 transition hover:scale-110"></div>
+                        </label>
+                        <label class="cursor-pointer">
+                            <input type="radio" name="category-color" value="teal" class="peer hidden">
+                            <div class="w-12 h-12 rounded-full bg-teal-500 border-4 border-transparent peer-checked:border-gray-400 dark:peer-checked:border-gray-300 transition hover:scale-110"></div>
+                        </label>
+                        <label class="cursor-pointer">
+                            <input type="radio" name="category-color" value="cyan" class="peer hidden">
+                            <div class="w-12 h-12 rounded-full bg-cyan-500 border-4 border-transparent peer-checked:border-gray-400 dark:peer-checked:border-gray-300 transition hover:scale-110"></div>
+                        </label>
+                        <label class="cursor-pointer">
+                            <input type="radio" name="category-color" value="lime" class="peer hidden">
+                            <div class="w-12 h-12 rounded-full bg-lime-500 border-4 border-transparent peer-checked:border-gray-400 dark:peer-checked:border-gray-300 transition hover:scale-110"></div>
+                        </label>
+                        <label class="cursor-pointer">
+                            <input type="radio" name="category-color" value="gray" class="peer hidden">
+                            <div class="w-12 h-12 rounded-full bg-gray-500 border-4 border-transparent peer-checked:border-gray-400 dark:peer-checked:border-gray-300 transition hover:scale-110"></div>
+                        </label>
+                    </div>
+                </div>
+                <button onclick="saveCategory()" class="w-full bg-gray-600 text-white font-bold py-2 rounded hover:bg-gray-700 transition">新增</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 忘記密碼模態視窗 -->
+    <div id="forgot-password-modal" class="hidden modal-backdrop" onclick="closeModalOnBackdrop(event, 'forgot-password-modal')">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-2xl p-6 max-w-md w-full mx-4 border border-gray-200 dark:border-gray-700" onclick="event.stopPropagation()">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-semibold text-gray-600 dark:text-gray-400">重設密碼</h3>
+                <button onclick="closeForgotPasswordModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-2xl font-bold">&times;</button>
+            </div>
+            
+            <!-- 步驟1：輸入 Email -->
+            <div id="forgot-step-1" class="space-y-4">
+                <div>
+                    <label class="block text-sm text-gray-600 dark:text-gray-400 mb-1">電子郵件</label>
+                    <input type="email" id="forgot-email" placeholder="請輸入您的註冊 Email" class="w-full border dark:border-gray-600 bg-white dark:bg-gray-700 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gray-500">
+                </div>
+                <div id="forgot-error" class="hidden bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 px-3 py-2 rounded text-sm">
+                    <span id="forgot-error-message"></span>
+                </div>
+                <div id="forgot-success" class="hidden bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-600 dark:text-green-400 px-3 py-2 rounded text-sm">
+                    <span id="forgot-success-message"></span>
+                </div>
+                <button onclick="sendResetCode()" class="w-full bg-blue-600 text-white font-bold py-2 rounded hover:bg-blue-700 transition">發送驗證碼</button>
+            </div>
+            
+            <!-- 步驟2：輸入驗證碼和新密碼 -->
+            <div id="forgot-step-2" class="hidden space-y-4">
+                <div>
+                    <label class="block text-sm text-gray-600 dark:text-gray-400 mb-1">驗證碼</label>
+                    <input type="text" id="reset-code" placeholder="請輸入郵件中的驗證碼" class="w-full border dark:border-gray-600 bg-white dark:bg-gray-700 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gray-500">
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-600 dark:text-gray-400 mb-1">新密碼</label>
+                    <input type="password" id="new-password" placeholder="至少8位，含大小寫字母、數字和特殊符號" class="w-full border dark:border-gray-600 bg-white dark:bg-gray-700 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gray-500">
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-600 dark:text-gray-400 mb-1">確認新密碼</label>
+                    <input type="password" id="confirm-new-password" placeholder="再次輸入新密碼" class="w-full border dark:border-gray-600 bg-white dark:bg-gray-700 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gray-500">
+                </div>
+                <div id="reset-error" class="hidden bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 px-3 py-2 rounded text-sm">
+                    <span id="reset-error-message"></span>
+                </div>
+                <button onclick="confirmResetPassword()" class="w-full bg-green-600 text-white font-bold py-2 rounded hover:bg-green-700 transition">重設密碼</button>
+                <button onclick="backToStep1()" class="w-full text-gray-600 dark:text-gray-400 text-sm underline hover:text-gray-800 dark:hover:text-gray-200">返回重新發送</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 設定模態視窗 -->
+    <div id="settings-modal" class="hidden modal-backdrop" onclick="closeModalOnBackdrop(event, 'settings-modal')">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-2xl p-6 max-w-md w-full mx-4 border border-gray-200 dark:border-gray-700" onclick="event.stopPropagation()">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-semibold text-gray-600 dark:text-gray-400">帳號設定</h3>
+                <button onclick="closeSettingsModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-2xl font-bold">&times;</button>
+            </div>
+            <div class="space-y-3">
+                <button onclick="openChangePasswordFromSettings()" class="w-full flex items-center justify-between px-4 py-3 rounded-lg border dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition">
+                    <div class="flex items-center gap-3">
+                        <svg class="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+                        </svg>
+                        <div class="text-left">
+                            <div class="font-medium text-gray-700 dark:text-gray-300">修改密碼</div>
+                            <div class="text-xs text-gray-500 dark:text-gray-400">變更登入密碼</div>
+                        </div>
+                    </div>
+                    <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                    </svg>
+                </button>
+                
+                <button onclick="deleteAllCompletedTasks()" class="w-full flex items-center justify-between px-4 py-3 rounded-lg border border-orange-200 dark:border-orange-800 hover:bg-orange-50 dark:hover:bg-orange-900/20 transition">
+                    <div class="flex items-center gap-3">
+                        <svg class="w-5 h-5 text-orange-600 dark:text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <div class="text-left">
+                            <div class="font-medium text-orange-700 dark:text-orange-300">清除已完成任務</div>
+                            <div class="text-xs text-orange-500 dark:text-orange-400">刪除所有已完成的事項</div>
+                        </div>
+                    </div>
+                    <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                    </svg>
+                </button>
+                
+                <button onclick="openDeleteAccountModal()" class="w-full flex items-center justify-between px-4 py-3 rounded-lg border border-red-200 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-900/20 transition">
+                    <div class="flex items-center gap-3">
+                        <svg class="w-5 h-5 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                        </svg>
+                        <div class="text-left">
+                            <div class="font-medium text-red-700 dark:text-red-300">刪除帳號</div>
+                            <div class="text-xs text-red-500 dark:text-red-400">永久刪除帳號和所有資料</div>
+                        </div>
+                    </div>
+                    <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 修改密碼模態視窗 -->
+    <div id="change-password-modal" class="hidden modal-backdrop" onclick="closeModalOnBackdrop(event, 'change-password-modal')">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-2xl p-6 max-w-md w-full mx-4 border border-gray-200 dark:border-gray-700" onclick="event.stopPropagation()">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-semibold text-gray-600 dark:text-gray-400">修改密碼</h3>
+                <button onclick="closeChangePasswordModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-2xl font-bold">&times;</button>
+            </div>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm text-gray-600 dark:text-gray-400 mb-1">目前密碼</label>
+                    <input type="password" id="current-password" class="w-full border dark:border-gray-600 bg-white dark:bg-gray-700 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gray-500">
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-600 dark:text-gray-400 mb-1">新密碼</label>
+                    <input type="password" id="change-new-password" placeholder="至少8位，含大小寫字母、數字和特殊符號" class="w-full border dark:border-gray-600 bg-white dark:bg-gray-700 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gray-500">
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-600 dark:text-gray-400 mb-1">確認新密碼</label>
+                    <input type="password" id="change-confirm-password" class="w-full border dark:border-gray-600 bg-white dark:bg-gray-700 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gray-500">
+                </div>
+                <div id="change-error" class="hidden bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 px-3 py-2 rounded text-sm">
+                    <span id="change-error-message"></span>
+                </div>
+                <div id="change-success" class="hidden bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-600 dark:text-green-400 px-3 py-2 rounded text-sm">
+                    <span id="change-success-message"></span>
+                </div>
+                <button onclick="changePassword()" class="w-full bg-blue-600 text-white font-bold py-2 rounded hover:bg-blue-700 transition">確認修改</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 刪除帳號確認模態視窗 -->
+    <div id="delete-account-modal" class="hidden modal-backdrop" onclick="closeModalOnBackdrop(event, 'delete-account-modal')">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-2xl p-6 max-w-md w-full mx-4 border-2 border-red-500 dark:border-red-600" onclick="event.stopPropagation()">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-semibold text-red-600 dark:text-red-400">⚠️ 刪除帳號</h3>
+                <button onclick="closeDeleteAccountModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-2xl font-bold">&times;</button>
+            </div>
+            <div class="space-y-4">
+                <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+                    <p class="text-sm text-red-700 dark:text-red-300 font-medium mb-2">此操作無法復原！</p>
+                    <ul class="text-sm text-red-600 dark:text-red-400 space-y-1 list-disc list-inside">
+                        <li>所有待辦事項將被永久刪除</li>
+                        <li>所有共享關係將被移除</li>
+                        <li>自訂分類設定將遺失</li>
+                        <li>帳號將無法恢復</li>
+                    </ul>
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-600 dark:text-gray-400 mb-1">請輸入密碼以確認刪除</label>
+                    <input type="password" id="delete-account-password" placeholder="輸入您的密碼" class="w-full border dark:border-gray-600 bg-white dark:bg-gray-700 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-red-500">
+                </div>
+                <div>
+                    <label class="flex items-center cursor-pointer">
+                        <input type="checkbox" id="delete-account-confirm" class="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500">
+                        <span class="ml-2 text-sm text-gray-600 dark:text-gray-400">我了解此操作無法復原</span>
+                    </label>
+                </div>
+                <div id="delete-account-error" class="hidden bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 px-3 py-2 rounded text-sm">
+                    <span id="delete-account-error-message"></span>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="closeDeleteAccountModal()" class="flex-1 bg-gray-500 text-white font-bold py-2 rounded hover:bg-gray-600 transition">取消</button>
+                    <button onclick="confirmDeleteAccount()" class="flex-1 bg-red-600 text-white font-bold py-2 rounded hover:bg-red-700 transition">確認刪除</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="cognito-config.js?v=20251221"></script>
+    <script src="api-client.js?v=20251221"></script>
+    <script src="sharing-ui.js?v=20251221"></script>
+    <script src="script.js?v=20251221"></script>
+</body>
+</html>
+            

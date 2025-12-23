@@ -1,0 +1,212 @@
+.hidden { display: none; }
+
+/* 平滑過渡效果 */
+body { transition: background-color 0.3s, color 0.3s; }
+
+/* 模態視窗背景遮罩 */
+.modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 50;
+    animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* 浮動按鈕動畫 */
+.fab {
+    animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+    from {
+        transform: translateY(100px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+/* 滾動條樣式 - 淺色模式 */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
+/* 滾動條樣式 - 深色模式 */
+.dark ::-webkit-scrollbar-track {
+    background: #1f2937;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+    background: #4b5563;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+    background: #6b7280;
+}
+
+/* 日曆懸浮提示視窗 */
+.calendar-tooltip {
+    position: absolute;
+    background: white;
+    border-radius: 12px;
+    padding: 12px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+    z-index: 100;
+    min-width: 200px;
+    max-width: 300px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.dark .calendar-tooltip {
+    background: #374151;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+}
+
+.calendar-tooltip.show {
+    opacity: 1;
+}
+
+/* 側邊欄樣式 */
+.sidebar {
+    transition: width 0.3s ease, transform 0.3s ease;
+    overflow: hidden;
+}
+
+.sidebar.collapsed {
+    width: 4rem;
+}
+
+.sidebar.collapsed .sidebar-text,
+.sidebar.collapsed .category-count,
+.sidebar.collapsed .all-icon {
+    display: none;
+}
+
+.sidebar.collapsed h2 {
+    opacity: 0;
+    height: 0;
+    margin: 0;
+    overflow: hidden;
+}
+
+.sidebar.collapsed nav {
+    padding-top: 1rem;
+}
+
+.sidebar.collapsed .category-filter {
+    justify-content: center;
+    padding: 0.75rem;
+}
+
+.sidebar.collapsed .category-icon {
+    margin: 0;
+}
+
+/* 縮小時折疊按鈕置中且箭頭方向改變 */
+.sidebar.collapsed .toggle-btn-container {
+    justify-content: center;
+    margin-bottom: 0.5rem;
+    padding: 0;
+}
+
+.sidebar.collapsed .toggle-btn-container button {
+    padding: 0.75rem;
+}
+
+.sidebar.collapsed .p-6 {
+    padding: 0.75rem;
+}
+
+.sidebar.collapsed .toggle-icon-left {
+    display: none;
+}
+
+.sidebar.collapsed .toggle-icon-right {
+    display: block;
+}
+
+.toggle-icon-right {
+    display: none;
+}
+
+/* 縮小時新增分類按鈕樣式 */
+.sidebar.collapsed .add-category-btn {
+    padding: 0.75rem;
+    justify-content: center;
+}
+
+.sidebar.collapsed .add-category-border {
+    border-top: none;
+    margin-top: 1rem;
+    padding-top: 0;
+}
+
+/* 確保加號圖標在縮小時顯示 */
+.add-icon {
+    flex-shrink: 0;
+}
+
+.sidebar.collapsed .add-icon {
+    margin: 0 !important;
+}
+
+@media (max-width: 768px) {
+    .sidebar {
+        transform: translateX(-100%);
+    }
+    .sidebar.open {
+        transform: translateX(0);
+    }
+}
+
+/* 活動分類樣式 */
+.category-filter.active {
+    background-color: rgb(243 244 246);
+    border-left: 3px solid rgb(107 114 128);
+}
+
+.dark .category-filter.active {
+    background-color: rgb(55 65 81);
+    border-left: 3px solid rgb(156 163 175);
+}
+
+/* 縮小時的活動分類樣式 */
+.sidebar.collapsed .category-filter.active {
+    background-color: transparent;
+    border-left: none;
+}
+
+.sidebar.collapsed .category-filter.active .category-icon {
+    transform: scale(1.4);
+    box-shadow: 0 0 0 2px rgb(107 114 128);
+}
+
+.dark .sidebar.collapsed .category-filter.active .category-icon {
+    box-shadow: 0 0 0 2px rgb(156 163 175);
+}
