@@ -153,21 +153,3 @@
 
 點擊右上角導覽列的 **🌙/☀️ 圖示** 切換淺色/深色主題
 
----
-
-## 專案結構
-
-```
-CloudTodo/
-├── index.html                    # 主頁面
-├── script.js                     # 核心邏輯
-├── api-client.js                 # API 呼叫封裝
-├── sharing-ui.js                 # 共享功能 UI
-├── cognito-config.js             # Cognito 認證配置
-├── style.css                     # 自訂樣式
-├── README.md                     # 本文件
-├── API.md                        # API 文檔
-├── lambda/                       # 後端程式碼
-   ├── task-handler-with-sharing-v3.js  # Lambda 函數
-   ├── template-with-sharing.yaml       # SAM 模板
-   └── package.json              # 依賴管理
