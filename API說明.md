@@ -221,12 +221,16 @@ Authorization: Bearer <cognito-jwt-token>
 **請求 Body：**
 ```json
 {
-  "email": "user@example.com"
+  "email": "user@example.com",
+  "permission": "read"
 }
 ```
 
 **欄位說明：**
 - `email` (必填): 被分享用戶的 Email
+- `permission` (必填): 分享權限，可選值：
+  - `"read"`: 唯讀權限，只能查看任務
+  - `"edit"`: 編輯權限，可以修改任務內容
 
 **回應範例：**
 ```json
@@ -236,6 +240,7 @@ Authorization: Bearer <cognito-jwt-token>
     "sharedWithUserId": "user-789",
     "taskId": "1703318400000-abc123",
     "ownerId": "user-123",
+    "permission": "read",
     "sharedWithEmail": "user@example.com",
     "sharedAt": "2025-12-23T12:00:00.000Z"
   }
@@ -264,11 +269,118 @@ Authorization: Bearer <cognito-jwt-token>
 ```
 **HTTP 狀態碼：** `403 Forbidden`
 
+無效的權限值：
+```json
+{
+  "message": "Invalid permission. Must be \"read\" or \"edit\""
+}
+```
+**HTTP 狀態碼：** `400 Bad Request`
+
+不能分享給自己：
+```json
+{
+  "message": "Cannot share with yourself"
+}
+```
+**HTTP 狀態碼：** `400 Bad Request`
+
 ---
 
-### 7. 移除分享
+### 7. 獲取任務分享列表
 
-**DELETE** `/tasks/{taskId}/share/{userId}`
+**GET** `/tasks/{taskId}/shares`
+
+獲取指定任務的所有分享記錄。
+
+**請求參數：** 無
+
+**回應範例：**
+```json
+{
+  "shares": [
+    {
+      "sharedWithUserId": "user-789",
+      "taskId": "1703318400000-abc123",
+      "ownerId": "user-123",
+      "permission": "read",
+      "sharedWithEmail": "user1@example.com",
+      "sharedAt": "2025-12-23T12:00:00.000Z"
+    },
+    {
+      "sharedWithUserId": "user-456",
+      "taskId": "1703318400000-abc123",
+      "ownerId": "user-123",
+      "permission": "edit",
+      "sharedWithEmail": "user2@example.com",
+      "sharedAt": "2025-12-23T13:00:00.000Z"
+    }
+  ]
+}
+```
+
+**HTTP 狀態碼：** `200 OK`
+
+**權限：** 只有任務擁有者可以查看分享列表
+
+**錯誤回應：**
+```json
+{
+  "message": "Only task owner can view shares"
+}
+```
+**HTTP 狀態碼：** `403 Forbidden`
+
+---
+
+### 8. 更新分享權限
+
+**PUT** `/tasks/{taskId}/share/{sharedUserId}`
+
+更新指定用戶的分享權限。
+
+**請求 Body：**
+```json
+{
+  "permission": "edit"
+}
+```
+
+**欄位說明：**
+- `permission` (必填): 新的權限，可選值：`"read"` 或 `"edit"`
+
+**回應範例：**
+```json
+{
+  "message": "Permission updated",
+  "share": {
+    "sharedWithUserId": "user-789",
+    "taskId": "1703318400000-abc123",
+    "ownerId": "user-123",
+    "permission": "edit",
+    "sharedWithEmail": "user@example.com",
+    "sharedAt": "2025-12-23T12:00:00.000Z"
+  }
+}
+```
+
+**HTTP 狀態碼：** `200 OK`
+
+**權限：** 只有任務擁有者可以更新權限
+
+**錯誤回應：**
+```json
+{
+  "message": "Only task owner can update permissions"
+}
+```
+**HTTP 狀態碼：** `403 Forbidden`
+
+---
+
+### 9. 移除分享
+
+**DELETE** `/tasks/{taskId}/share/{sharedUserId}`
 
 移除任務的分享權限。
 
@@ -341,6 +453,7 @@ Authorization: Bearer <cognito-jwt-token>
   // 共享任務額外欄位
   ownerEmail?: string;      // 擁有者 Email（僅共享任務）
   isShared?: boolean;       // 是否為共享任務
+  sharedPermission?: string; // 共享權限（"read" 或 "edit"，僅共享任務）
 }
 ```
 
@@ -351,6 +464,7 @@ Authorization: Bearer <cognito-jwt-token>
   sharedWithUserId: string;  // 被分享用戶的 Cognito User ID
   taskId: string;            // 任務 ID
   ownerId: string;           // 擁有者的 Cognito User ID
+  permission: string;        // 分享權限（"read" 或 "edit"）
   sharedWithEmail: string;   // 被分享用戶的 Email
   sharedAt: string;          // 分享時間（ISO 8601）
 }
@@ -425,15 +539,49 @@ async function updateTask(taskId, updates) {
 
 ### 分享任務
 
-```javascript
-async function shareTask(taskId, email) {
+```javascript, permission) {
   const response = await fetch(`${API_BASE_URL}/tasks/${taskId}/share`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({ email })
+    body: JSON.stringify({ email, permission })
+  });
+  
+  const data = await response.json();
+  return data;
+}
+```
+
+### 獲取任務分享列表
+
+```javascript
+async function getTaskShares(taskId) {
+  const response = await fetch(`${API_BASE_URL}/tasks/${taskId}/shares`, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    }
+  });
+  
+  const data = await response.json();
+  return data;
+}
+```
+
+### 更新分享權限
+
+```javascript
+async function updateSharePermission(taskId, sharedUserId, permission) {
+  const response = await fetch(`${API_BASE_URL}/tasks/${taskId}/share/${sharedUserId}`, {
+    method: 'PUT',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ permission })
   });
   
   const data = await response.json();
@@ -444,7 +592,8 @@ async function shareTask(taskId, email) {
 ### 移除分享
 
 ```javascript
-async function removeShare(taskId, userId) {
+async function removeShare(taskId, sharedUserId) {
+  const response = await fetch(`${API_BASE_URL}/tasks/${taskId}/share/${sharedU
   const response = await fetch(`${API_BASE_URL}/tasks/${taskId}/share/${userId}`, {
     method: 'DELETE',
     headers: {
