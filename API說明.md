@@ -606,25 +606,3 @@ async function removeShare(taskId, sharedUserId) {
   return data;
 }
 ```
-
----
-
-## 注意事項
-
-1. **認證要求：** 所有 API 都需要有效的 Cognito JWT Token
-2. **權限控制：** 只有任務擁有者可以編輯和刪除自己的任務
-3. **CORS：** API 已啟用 CORS，允許從任何來源訪問
-4. **速率限制：** 使用 AWS API Gateway 預設速率限制
-5. **資料大小：** DynamoDB 單項目大小限制為 400 KB
-
----
-
-## 技術架構
-
-- **API Gateway:** RESTful API 端點
-- **Lambda:** Node.js 18.x/20.x 執行環境
-- **DynamoDB:** 
-  - `CloudTodo-Tasks` 表（任務資料）
-  - `CloudTodo-SharedTasks` 表（分享記錄）
-- **Cognito:** 用戶認證與授權
-- **SDK:** AWS SDK v3
